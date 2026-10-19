@@ -1,0 +1,27 @@
+[project]
+name = "orthoviz-backend"
+version = "0.1.0"
+description = "OrthoViz local processing backend: DICOM loading and TotalSegmentator segmentation"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "TotalSegmentator>=2.4",
+    "pydicom>=2.4",
+    # Decoders for compressed DICOM transfer syntaxes (the RSNA samples are JPEG Lossless)
+    "pylibjpeg>=2.0",
+    "pylibjpeg-libjpeg>=2.1",
+    "nibabel>=5.0",
+    "numpy",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+orthoviz-segment = "orthoviz_backend.cli:main"
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["orthoviz_backend"]
