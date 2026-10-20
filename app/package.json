@@ -8,7 +8,8 @@
   "scripts": {
     "start": "env -u ELECTRON_RUN_AS_NODE electron .",
     "test": "node --test tests/unit",
-    "test:e2e": "node tests/e2e/run-patient1.mjs"
+    "test:e2e": "node tests/e2e/run-patient1.mjs",
+    "test:viewer": "node tests/e2e/viewer-interactions.mjs"
   },
   "dependencies": {
     "three": "0.186.1"

@@ -1,12 +1,14 @@
 // UI flow: Import screen -> Processing screen -> 3D viewer.
 
 import { Viewer } from "./viewer.js";
+import { StructurePanel } from "./panel.js";
 
 const api = window.orthoviz;
 const $ = (id) => document.getElementById(id);
 
 const SCREENS = ["import", "processing", "viewer"];
 let viewer = null;
+let panel = null;
 
 function show(screen) {
   for (const s of SCREENS) $(`screen-${s}`).hidden = s !== screen;
@@ -168,11 +170,25 @@ async function openResult(outputDir, sourceFolder) {
   }
 
   show("viewer");
-  if (!viewer) viewer = new Viewer($("viewport"));
+  if (!viewer) createViewer();
   viewer.setModel(model);
+  panel.render();
   const name = (sourceFolder || outputDir).split("/").filter(Boolean).pop();
   $("viewer-title").textContent = `${name} · ${model.meshes.length} structures`;
   document.body.dataset.meshCount = String(model.meshes.length);
+}
+
+function createViewer() {
+  viewer = new Viewer($("viewport"), { onSelect: (label) => panel?.showSelection(label) });
+  panel = new StructurePanel({
+    list: $("structure-list"),
+    filterButtons: [...document.querySelectorAll(".segmented button")],
+    viewer,
+  });
+  for (const button of document.querySelectorAll(".view-presets button")) {
+    button.addEventListener("click", () => viewer.setView(button.dataset.view));
+  }
+  window.__orthovizViewer = viewer; // handle for the e2e tests
 }
 
 $("viewer-new-scan").addEventListener("click", () => show("import"));

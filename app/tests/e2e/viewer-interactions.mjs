@@ -1,0 +1,189 @@
+// Exercises the 3D viewer on an existing backend result (no backend run needed).
+//
+//   node tests/e2e/viewer-interactions.mjs [result dir] [screenshot dir]
+//
+// Uses real mouse clicks on the canvas, so picking goes through the actual raycasting path.
+
+import { _electron as electron } from "playwright-core";
+import assert from "node:assert";
+import fs from "node:fs";
+import path from "node:path";
+
+const appDir = path.resolve(import.meta.dirname, "..", "..");
+const resultDir = path.resolve(process.argv[2] || path.join(appDir, "..", "output", "patient1"));
+const shotDir = path.resolve(process.argv[3] || path.join(appDir, "tests", "e2e", "output"));
+fs.mkdirSync(shotDir, { recursive: true });
+
+// VS Code's terminal sets ELECTRON_RUN_AS_NODE, which would start Electron as plain Node.
+const { ELECTRON_RUN_AS_NODE, ...env } = process.env;
+const app = await electron.launch({ args: [appDir, `--result=${resultDir}`], cwd: appDir, env });
+const page = await app.firstWindow();
+const problems = [];
+page.on("console", (m) => { if (["error", "warning"].includes(m.type())) problems.push(`${m.type()}: ${m.text()}`); });
+page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
+
+const shot = (name) => page.screenshot({ path: path.join(shotDir, `${name}.png`) });
+const settle = () => page.waitForTimeout(700); // view animations take 450 ms
+const step = (msg) => console.log(`✔ ${msg}`);
+
+const selectedName = () => page.evaluate(() => {
+  const v = window.__orthovizViewer;
+  return v.selected === null ? null : v.structures.get(v.selected).info.name;
+});
+const tagText = () => page.evaluate(() => {
+  const tag = document.querySelector(".tag");
+  return tag.hidden ? null : tag.querySelector(".tag-code").textContent;
+});
+const isBehind = async () => { await page.waitForTimeout(300); return page.$eval(".tag", (t) => t.classList.contains("tag-behind")); };
+const cameraDistance = () => page.evaluate(() => { const v = window.__orthovizViewer; return v.camera.position.distanceTo(v.controls.target); });
+const labelOf = (name) => page.evaluate((n) => window.__orthovizViewer.listStructures().find((s) => s.info.name === n).label, name);
+const screenPos = (name) => page.evaluate((n) => {
+  const v = window.__orthovizViewer;
+  return v.screenPositionOf(v.listStructures().find((s) => s.info.name === n).label);
+}, name);
+/**
+ * Screen position of the structure's surface point nearest the camera. That point faces
+ * the viewer, so a correct pick there must return this structure (unless something
+ * solid is in front). A bounding-box centre is not good enough: for a vertebra it sits
+ * in the spinal canal, and from the front a neighbour's body can be in the way.
+ */
+const nearestPointOnScreen = (name) => page.evaluate((n) => {
+  const v = window.__orthovizViewer;
+  const { mesh } = [...v.structures.values()].find((s) => s.info.name === n);
+  const Vec = v.camera.position.constructor;
+  const pos = mesh.geometry.attributes.position;
+  let best = null, bestDist = Infinity;
+  const w = new Vec();
+  for (let i = 0; i < pos.count; i++) {
+    w.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+    const d = w.distanceTo(v.camera.position);
+    if (d < bestDist) { bestDist = d; best = w.clone(); }
+  }
+  const p = best.project(v.camera);
+  const r = v.renderer.domElement.getBoundingClientRect();
+  return { x: r.left + ((p.x + 1) / 2) * r.width, y: r.top + ((1 - p.y) / 2) * r.height };
+}, name);
+
+/** Click a structure where it faces the camera; returns what got selected. */
+async function clickOn(name) {
+  const p = await nearestPointOnScreen(name);
+  await page.mouse.click(p.x, p.y);
+  return selectedName();
+}
+
+await page.waitForSelector('body[data-screen="viewer"]', { timeout: 60_000 });
+await page.waitForSelector(".structure-list .row");
+await settle();
+
+// --- Panel contents
+const groups = await page.$$eval(".group-header", (els) => els.map((e) => `${e.querySelector(".group-title").textContent} (${e.querySelector(".group-count").textContent})`));
+const spineOrder = await page.$$eval(".group:first-child .row-name", (els) => els.map((e) => e.textContent));
+console.log("Groups:", groups.join(", "));
+console.log("Spine order:", spineOrder.join(", "));
+assert.deepStrictEqual(spineOrder.slice(0, 8), ["C1 vertebra", "C2 vertebra", "C3 vertebra", "C4 vertebra", "C5 vertebra", "C6 vertebra", "C7 vertebra", "T1 vertebra"]);
+assert.strictEqual(await page.getAttribute('.segmented [data-filter="all"]', "aria-pressed"), "true");
+await shot("v1-front");
+step("panel lists structures by group, spine in anatomical order; 'Everything' filter active");
+
+// --- Click a vertebra in the 3D view (front view: through the see-through windpipe and vessels)
+const pickedFront = await clickOn("vertebrae_C5");
+assert.strictEqual(pickedFront, "vertebrae_C5");
+assert.strictEqual(await tagText(), "C5");
+assert.strictEqual(await page.getAttribute('.row[data-name="vertebrae_C5"]', "class"), "row selected");
+console.log("  tag detail:", await page.textContent(".tag-detail"));
+assert.strictEqual(await isBehind(), false, "C5 is visible from the front");
+await shot("v2-click-c5");
+step("clicking C5 highlights it, labels it 'C5', and selects its panel row");
+
+// --- Dragging (rotating) must not change the selection
+const p = await screenPos("vertebrae_C3");
+await page.mouse.move(p.x, p.y);
+await page.mouse.down();
+await page.mouse.move(p.x + 60, p.y + 10, { steps: 5 });
+await page.mouse.up();
+assert.strictEqual(await selectedName(), "vertebrae_C5");
+step("drag-to-rotate over another vertebra keeps the selection");
+
+// --- Preset views
+await page.click('[data-view="side"]');
+await settle();
+const camSide = await page.evaluate(() => window.__orthovizViewer.camera.position.toArray().map(Math.round));
+assert.ok(camSide[0] > 0 && Math.abs(camSide[1]) < 1 && Math.abs(camSide[2]) < 1, `side camera at ${camSide}`);
+assert.strictEqual(await clickOn("vertebrae_C2"), "vertebrae_C2");
+assert.strictEqual(await tagText(), "C2");
+await shot("v3-side-c2");
+step("Side view: camera on the patient's left; clicking C2 labels it");
+
+await page.click('[data-view="top"]');
+await settle();
+const camTop = await page.evaluate(() => window.__orthovizViewer.camera.position.toArray().map(Math.round));
+assert.ok(camTop[1] > 0 && Math.abs(camTop[0]) < 1, `top camera at ${camTop}`);
+// From above, C1 and C2 show through the opening in the skull base; C3 and below are hidden.
+assert.strictEqual(await isBehind(), false, "C2 is visible through the foramen magnum");
+await page.click('.row[data-name="vertebrae_C4"] .row-name');
+assert.strictEqual(await isBehind(), true, "C4 is hidden under the skull from above");
+await shot("v4-top");
+step("Top view: camera above the patient; C2 counts as visible, C4's label is marked '(behind)'");
+
+await page.click('[data-view="front"]');
+await settle();
+
+// --- Quick filters and toggles
+const distAll = await cameraDistance();
+await page.click('.segmented [data-filter="spine"]');
+await settle();
+const distSpine = await cameraDistance();
+assert.ok(distSpine < distAll * 0.8, `camera should move in for the spine (${distAll.toFixed(0)} -> ${distSpine.toFixed(0)})`);
+const visibleNames = () => page.evaluate(() => window.__orthovizViewer.listStructures().filter((s) => s.visible).map((s) => s.info.name));
+const spineOnly = await visibleNames();
+assert.ok(spineOnly.every((n) => n.startsWith("vertebrae_") || n === "spinal_cord"), spineOnly.join());
+assert.strictEqual(await page.getAttribute('.segmented [data-filter="spine"]', "aria-pressed"), "true");
+await shot("v5-spine-only");
+step(`'Spine' filter shows only vertebrae and spinal cord (${spineOnly.length} structures) and zooms to fit (${distAll.toFixed(0)} -> ${distSpine.toFixed(0)} mm)`);
+
+await page.click('.segmented [data-filter="bones"]');
+await settle();
+const bones = await visibleNames();
+assert.ok(bones.includes("skull") && bones.includes("vertebrae_C1") && !bones.includes("spinal_cord") && !bones.includes("trachea"));
+await shot("v6-bones");
+step(`'Bones' filter shows all bones (${bones.length}) and hides soft tissue`);
+
+// Hiding the selected structure clears the selection; the group checkbox goes indeterminate.
+await page.click('.row[data-name="vertebrae_C3"] .row-name');
+assert.strictEqual(await tagText(), "C3");
+await page.click('.row[data-name="vertebrae_C3"] input[type="checkbox"]');
+assert.strictEqual(await selectedName(), null);
+assert.strictEqual(await tagText(), null);
+assert.strictEqual(await page.$eval(".group:first-child .group-header input", (el) => el.indeterminate), true);
+assert.strictEqual(await page.getAttribute('.segmented [data-filter="bones"]', "aria-pressed"), "false");
+step("selecting from the panel labels C3; hiding it clears the label and the spine group shows partial");
+
+// Clicking a hidden structure's name shows and selects it.
+await page.click('.row[data-name="vertebrae_C3"] .row-name');
+assert.strictEqual(await selectedName(), "vertebrae_C3");
+assert.strictEqual(await page.$eval('.row[data-name="vertebrae_C3"] input', (el) => el.checked), true);
+step("clicking a hidden structure's name shows and selects it");
+
+// Group checkbox hides the whole group.
+await page.click('.group:nth-child(2) .group-header input');
+const afterGroupOff = await visibleNames();
+console.log("  after unticking group 2:", afterGroupOff.length, "visible");
+
+// --- Clearing the selection
+await page.keyboard.press("Escape");
+assert.strictEqual(await selectedName(), null);
+await page.click('.row[data-name="vertebrae_C4"] .row-name');
+const corner = await page.$eval("#viewport", (el) => { const r = el.getBoundingClientRect(); return { x: r.left + 40, y: r.bottom - 60 }; });
+await page.mouse.click(corner.x, corner.y);
+assert.strictEqual(await selectedName(), null);
+step("Escape and clicking empty space both clear the selection");
+
+await page.click('.segmented [data-filter="all"]');
+await page.click('.row[data-name="vertebrae_C4"] .row-name');
+await settle();
+await shot("v7-everything-c4");
+
+console.log(problems.length ? `Console problems:\n${problems.join("\n")}` : "No console errors or warnings");
+console.log(`Screenshots: ${shotDir}`);
+await app.close();
+if (problems.length) process.exit(1);

@@ -1,8 +1,9 @@
 # OrthoViz — Electron app
 
 Electron shell + Three.js UI (design doc §3, §9): Import screen → Processing screen → 3D viewer.
-The 3D viewer is currently basic (rotate/zoom a model of all segmented structures);
-structure toggles, vertebra labels and preset views come next.
+The viewer has a structure panel (grouped list with colour swatches, show/hide toggles,
+and Everything / Bones / Spine quick filters), click-to-name (click a vertebra to highlight
+it and label it, e.g. "C3 — 3rd neck vertebra (cervical)"), and Front / Side / Top views.
 
 ## Setup
 
@@ -27,7 +28,10 @@ src/main/mesh-worker.js  worker thread: segmentation.nii.gz -> one mesh per stru
 src/main/meshing.js      surface extraction (Gaussian-smoothed surface nets + Taubin smoothing)
 src/main/nifti.js        minimal NIfTI-1 reader
 src/main/preload.js      the API exposed to the UI (window.orthoviz)
-src/renderer/            the three screens (app.js) and the Three.js viewer (viewer.js)
+src/renderer/app.js      screen flow: Import -> Processing -> Viewer
+src/renderer/viewer.js   Three.js viewer: picking, selection label, preset views
+src/renderer/panel.js    structure list with toggles and quick filters
+src/renderer/anatomy.js  plain-language names, groups and colours for TotalSegmentator labels
 ```
 
 - Each run writes to `~/Library/Application Support/OrthoViz/results/<folder>-<timestamp>/`
@@ -40,6 +44,7 @@ src/renderer/            the three screens (app.js) and the Three.js viewer (vie
 ## Tests
 
 ```sh
-npm test            # unit tests: progress parsing, meshing, NIfTI reading, CSP
+npm test            # unit tests: progress parsing, meshing, NIfTI reading, anatomy names, CSP
+npm run test:viewer # viewer interactions on ../output/patient1 (no backend run, ~15 s)
 npm run test:e2e    # real backend on dicom_samples/patient1 (~3 min); screenshots in tests/e2e/output/
 ```

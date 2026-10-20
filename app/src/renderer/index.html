@@ -72,10 +72,28 @@
       <button id="viewer-new-scan" class="button small" type="button">Open another scan</button>
     </header>
     <div class="viewer-body">
-      <div id="viewport" class="viewport"></div>
-      <!-- Reserved for the structure list / Phase 2 results panel. -->
+      <div id="viewport" class="viewport">
+        <div class="view-presets" role="group" aria-label="Preset views">
+          <button class="button small" type="button" data-view="front">Front</button>
+          <button class="button small" type="button" data-view="side">Side</button>
+          <button class="button small" type="button" data-view="top">Top</button>
+        </div>
+        <p class="viewer-hint">Click a bone to name it &middot; Drag to rotate &middot; Scroll to zoom &middot; Right-drag to move</p>
+      </div>
+
+      <aside class="panel" aria-label="Structures">
+        <div class="panel-head">
+          <h2>Structures</h2>
+          <div class="segmented" role="group" aria-label="Quick filters">
+            <button type="button" data-filter="all">Everything</button>
+            <button type="button" data-filter="bones">Bones</button>
+            <button type="button" data-filter="spine">Spine</button>
+          </div>
+        </div>
+        <div id="structure-list" class="structure-list"></div>
+        <!-- Phase 2: fracture findings panel slots in below the structure list. -->
+      </aside>
     </div>
-    <p class="viewer-hint">Drag to rotate &middot; Scroll to zoom &middot; Right-drag to move</p>
   </section>
 
 </body>
