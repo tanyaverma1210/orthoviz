@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- The import map is the only inline script; its hash is pinned here (see tests/unit/csp.test.js). -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self' 'sha256-p2wJOWN8rB9YvERkPNjvIDxkJTxs+fOHzf3zG8iFAQc='; style-src 'self'; img-src 'self' data:; connect-src 'self'">
+  <title>OrthoViz</title>
+  <link rel="stylesheet" href="styles.css">
+  <script type="importmap">{"imports":{"three":"../../node_modules/three/build/three.module.js","three/addons/":"../../node_modules/three/examples/jsm/"}}</script>
+  <script type="module" src="app.js"></script>
+</head>
+<body data-screen="import">
+
+  <!-- 1. Import -->
+  <section id="screen-import" class="screen" aria-labelledby="import-title">
+    <div class="import-card">
+      <p class="brand">OrthoViz</p>
+      <h1 id="import-title">See your spine in 3D</h1>
+      <p class="lede">Choose the folder of CT scan files (DICOM) you were given.
+        Everything is processed on this computer &mdash; nothing is uploaded.</p>
+
+      <div id="drop-zone" class="drop-zone" tabindex="-1">
+        <svg class="drop-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.2l2 2h8.8A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/>
+        </svg>
+        <p class="drop-title">Drag the scan folder here</p>
+        <p class="drop-or">or</p>
+        <button id="choose-folder" class="button primary" type="button">Choose folder&hellip;</button>
+      </div>
+
+      <p id="import-error" class="error" role="alert" hidden></p>
+    </div>
+  </section>
+
+  <!-- 2. Processing -->
+  <section id="screen-processing" class="screen" aria-labelledby="processing-title" hidden>
+    <div class="processing-card">
+      <p class="brand">OrthoViz</p>
+      <h1 id="processing-title">Building your 3D model</h1>
+      <p id="processing-folder" class="muted mono"></p>
+
+      <div id="processing-active">
+        <p id="processing-stage" class="stage">Starting&hellip;</p>
+        <div class="progress" role="progressbar" aria-labelledby="processing-stage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div id="progress-fill" class="progress-fill"></div>
+        </div>
+        <div class="progress-meta">
+          <span id="progress-percent">0%</span>
+          <span id="progress-time"></span>
+        </div>
+        <p id="processing-reassure" class="muted">This usually takes 3&ndash;10 minutes. You can leave this window open while it works.</p>
+        <button id="cancel-processing" class="button" type="button">Cancel</button>
+      </div>
+
+      <div id="processing-failed" hidden>
+        <p id="processing-error" class="error" role="alert"></p>
+        <details id="processing-details-box">
+          <summary>Technical details</summary>
+          <pre id="processing-details"></pre>
+        </details>
+        <button id="processing-back" class="button primary" type="button">Choose another folder</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Viewer -->
+  <section id="screen-viewer" class="screen" aria-label="3D viewer" hidden>
+    <header class="viewer-bar">
+      <span class="brand">OrthoViz</span>
+      <span id="viewer-title" class="muted"></span>
+      <button id="viewer-new-scan" class="button small" type="button">Open another scan</button>
+    </header>
+    <div class="viewer-body">
+      <div id="viewport" class="viewport"></div>
+      <!-- Reserved for the structure list / Phase 2 results panel. -->
+    </div>
+    <p class="viewer-hint">Drag to rotate &middot; Scroll to zoom &middot; Right-drag to move</p>
+  </section>
+
+</body>
+</html>

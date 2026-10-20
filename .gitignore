@@ -11,3 +11,6 @@ __pycache__/
 # Electron / Node
 node_modules/
 dist/
+
+# E2E screenshots
+app/tests/e2e/output/

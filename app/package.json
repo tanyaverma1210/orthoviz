@@ -1,0 +1,20 @@
+{
+  "name": "orthoviz",
+  "productName": "OrthoViz",
+  "version": "0.1.0",
+  "description": "View a cervical-spine CT scan as a 3D model",
+  "private": true,
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "env -u ELECTRON_RUN_AS_NODE electron .",
+    "test": "node --test tests/unit",
+    "test:e2e": "node tests/e2e/run-patient1.mjs"
+  },
+  "dependencies": {
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "electron": "44.9.0",
+    "playwright-core": "1.64.1"
+  }
+}

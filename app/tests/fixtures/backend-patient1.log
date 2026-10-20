@@ -1,0 +1,46 @@
+2026-10-19 10:45:02,849 INFO Loading DICOM files from dicom_samples/patient1
+2026-10-19 10:45:06,687 INFO Loaded 429 slices, shape (512, 512, 429), spacing (0.285, 0.285, 0.5) mm
+2026-10-19 10:45:10,408 INFO Running TotalSegmentator (full resolution, device=mps)...
+2026-10-19 10:45:12,318 INFO NumExpr defaulting to 8 threads.
+<venv>/lib/python3.12/site-packages/torch/jit/_script.py:1643: FutureWarning: `torch.jit.interface` is deprecated. Please use `torch.compile` instead.
+  warnings.warn(
+  0%|          | 0/2 [00:00<?, ?it/s] 50%|█████     | 1/2 [00:11<00:11, 11.79s/it]100%|██████████| 2/2 [00:23<00:00, 11.64s/it]100%|██████████| 2/2 [00:23<00:00, 11.67s/it]
+  0%|          | 0/2 [00:00<?, ?it/s] 50%|█████     | 1/2 [00:11<00:11, 11.84s/it]100%|██████████| 2/2 [00:23<00:00, 11.69s/it]100%|██████████| 2/2 [00:23<00:00, 11.71s/it]
+  0%|          | 0/2 [00:00<?, ?it/s] 50%|█████     | 1/2 [00:11<00:11, 11.40s/it]100%|██████████| 2/2 [00:22<00:00, 11.29s/it]100%|██████████| 2/2 [00:22<00:00, 11.31s/it]
+  0%|          | 0/2 [00:00<?, ?it/s] 50%|█████     | 1/2 [00:11<00:11, 11.32s/it]100%|██████████| 2/2 [00:22<00:00, 11.40s/it]100%|██████████| 2/2 [00:22<00:00, 11.38s/it]
+  0%|          | 0/2 [00:00<?, ?it/s] 50%|█████     | 1/2 [00:11<00:11, 11.33s/it]100%|██████████| 2/2 [00:22<00:00, 11.33s/it]100%|██████████| 2/2 [00:22<00:00, 11.33s/it]
+2026-10-19 10:47:44,672 INFO Segmentation finished in 154.3 s; 41 structures found
+
+If you use this tool please cite: https://pubs.rsna.org/doi/10.1148/ryai.230024
+
+Resampling...
+  Resampled in 0.29s
+Predicting part 1 of 5 ...
+Predicting part 2 of 5 ...
+Predicting part 3 of 5 ...
+Predicting part 4 of 5 ...
+Predicting part 5 of 5 ...
+  Predicted in 146.75s
+Resampling...
+  Resampled in 1.06s
+Saving segmentations...
+  Saved in 0.68s
+Done. Segmentation written to output/patient1 (segmentation took 154.3 s)
+      162.92 real        62.06 user        17.28 sys
+          3554705408  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             2393804  page reclaims
+                5905  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                4994  messages sent
+                9927  messages received
+                   0  signals received
+               26873  voluntary context switches
+              162146  involuntary context switches
+        199664772905  instructions retired
+         92706933959  cycles elapsed
+          8161946112  peak memory footprint
