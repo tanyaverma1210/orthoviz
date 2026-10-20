@@ -7,6 +7,7 @@ const api = window.orthoviz;
 const $ = (id) => document.getElementById(id);
 
 const SCREENS = ["import", "processing", "viewer"];
+const appInfo = api.appInfo();
 let viewer = null;
 let panel = null;
 
@@ -52,6 +53,7 @@ dropZone.addEventListener("drop", async (e) => {
 
 const STAGE_TEXT = {
   starting: () => "Starting…",
+  preparing: (p) => `Getting ready for first use — installing AI models (${Math.min(p.done + 1, p.total)} of ${p.total})`,
   loading: (p) => (p.slices ? `Reading scan files (${p.slices} images)` : "Reading scan files"),
   segmenting: (p) => `Identifying bones and tissues — step ${Math.max(p.part, 1)} of ${p.parts}`,
   saving: () => "Saving results",
@@ -188,10 +190,22 @@ function createViewer() {
   for (const button of document.querySelectorAll(".view-presets button")) {
     button.addEventListener("click", () => viewer.setView(button.dataset.view));
   }
-  window.__orthovizViewer = viewer; // handle for the e2e tests
+  // Handle for the e2e tests (tests/e2e/viewer-interactions.mjs); never exposed in the packaged app.
+  appInfo.then(({ isPackaged }) => {
+    if (!isPackaged) window.__orthovizViewer = viewer;
+  });
 }
 
 $("viewer-new-scan").addEventListener("click", () => show("import"));
+
+// --- About ----------------------------------------------------------------------
+
+for (const button of document.querySelectorAll("[data-open-about]")) {
+  button.addEventListener("click", () => $("about-dialog").showModal());
+}
+$("about-licenses").addEventListener("click", () => api.openLicenses());
+$("about-close").addEventListener("click", () => $("about-dialog").close());
+appInfo.then(({ version }) => ($("about-version").textContent = `Version ${version}`));
 
 // Dev shortcut: `npm start -- --result=<output dir>` skips straight to the viewer.
 api.startupResult().then((dir) => {

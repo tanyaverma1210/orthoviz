@@ -30,6 +30,7 @@
       </div>
 
       <p id="import-error" class="error" role="alert" hidden></p>
+      <p class="import-footer"><button type="button" class="link" data-open-about>About &amp; licenses</button></p>
     </div>
   </section>
 
@@ -69,6 +70,7 @@
     <header class="viewer-bar">
       <span class="brand">OrthoViz</span>
       <span id="viewer-title" class="muted"></span>
+      <button type="button" class="link small" data-open-about>About</button>
       <button id="viewer-new-scan" class="button small" type="button">Open another scan</button>
     </header>
     <div class="viewer-body">
@@ -95,6 +97,22 @@
       </aside>
     </div>
   </section>
+
+  <dialog id="about-dialog" aria-labelledby="about-title">
+    <p class="brand">OrthoViz</p>
+    <h2 id="about-title">About OrthoViz</h2>
+    <p id="about-version" class="muted"></p>
+    <p>OrthoViz turns a CT scan into a 3D model to help explain spine anatomy.
+      It is a visualization tool, not a diagnostic device. Everything runs on this computer.</p>
+    <p>Anatomical segmentation is performed by <strong>TotalSegmentator</strong>
+      (Apache License 2.0): Wasserthal J. et al., &ldquo;TotalSegmentator: Robust Segmentation of
+      104 Anatomic Structures in CT Images,&rdquo; <em>Radiology: Artificial Intelligence</em>, 2023,
+      doi:10.1148/ryai.230024. TotalSegmentator is built on nnU-Net (Apache License 2.0).</p>
+    <div class="dialog-actions">
+      <button id="about-licenses" class="button" type="button">View third-party licenses</button>
+      <button id="about-close" class="button primary" type="button">Close</button>
+    </div>
+  </dialog>
 
 </body>
 </html>

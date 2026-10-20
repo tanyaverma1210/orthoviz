@@ -6,15 +6,16 @@ requires-python = ">=3.10,<3.13"
 dependencies = [
     "TotalSegmentator>=2.4",
     "pydicom>=2.4",
-    # Decoders for compressed DICOM transfer syntaxes (the RSNA samples are JPEG Lossless)
-    "pylibjpeg>=2.0",
-    "pylibjpeg-libjpeg>=2.1",
+    # Decoder for compressed DICOM transfer syntaxes (the RSNA samples are JPEG Lossless).
+    # GDCM (BSD; Python wrapper Apache-2.0) rather than pylibjpeg-libjpeg, which is GPL-3.0.
+    "python-gdcm>=3.0",
     "nibabel>=5.0",
     "numpy",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest"]
+build = ["pyinstaller>=6.10"]
 
 [project.scripts]
 orthoviz-segment = "orthoviz_backend.cli:main"

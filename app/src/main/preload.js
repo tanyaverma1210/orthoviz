@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld("orthoviz", {
   cancelProcessing: () => ipcRenderer.invoke("cancel-processing"),
   buildModel: (outputDir) => ipcRenderer.invoke("build-model", outputDir),
   startupResult: () => ipcRenderer.invoke("startup-result"),
+  appInfo: () => ipcRenderer.invoke("app-info"),
+  openLicenses: () => ipcRenderer.invoke("open-licenses"),
   onProgress: (cb) => subscribe("processing-progress", cb),
   onFinished: (cb) => subscribe("processing-finished", cb),
 });

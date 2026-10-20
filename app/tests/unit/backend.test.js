@@ -44,3 +44,16 @@ test("DICOM load errors become a plain-language message", () => {
   const msg = friendlyError(["2026-10-19 ERROR Could not load DICOM folder: No DICOM image files found in /x"], 2, null);
   assert.match(msg, /doesn't look like a CT scan.*No DICOM image files found/);
 });
+
+const { backendCommand } = require("../../src/main/backend");
+
+test("backend path: env override, then bundled binary when packaged, else dev venv", () => {
+  const resourcesPath = "/Applications/OrthoViz.app/Contents/Resources";
+  assert.strictEqual(
+    backendCommand({ isPackaged: true, resourcesPath, env: {} }),
+    `${resourcesPath}/backend/orthoviz-segment/orthoviz-segment`,
+  );
+  assert.strictEqual(backendCommand({ isPackaged: true, resourcesPath, env: { ORTHOVIZ_BACKEND: "/x/seg" } }), "/x/seg");
+  assert.strictEqual(backendCommand({ isPackaged: false, env: { ORTHOVIZ_BACKEND: "/x/seg" } }), "/x/seg");
+  assert.match(backendCommand({ isPackaged: false, env: {} }), /backend\/\.venv\/bin\/orthoviz-segment$/);
+});

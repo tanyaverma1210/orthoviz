@@ -14,3 +14,7 @@ dist/
 
 # E2E screenshots
 app/tests/e2e/output/
+
+# Packaging outputs
+backend/build/
+app/build-resources/

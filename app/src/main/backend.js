@@ -13,9 +13,16 @@ const LOAD_END = 0.05;
 const PREDICT_START = 0.08;
 const PREDICT_END = 0.95;
 
-function backendCommand() {
-  return process.env.ORTHOVIZ_BACKEND
-    || path.resolve(__dirname, "..", "..", "..", "backend", ".venv", "bin", "orthoviz-segment");
+/**
+ * Path to the backend executable:
+ *   ORTHOVIZ_BACKEND env var, if set (dev/testing override);
+ *   the PyInstaller binary bundled under Resources/ in a packaged app;
+ *   otherwise the development venv.
+ */
+function backendCommand({ isPackaged = false, resourcesPath = "", env = process.env } = {}) {
+  if (env.ORTHOVIZ_BACKEND) return env.ORTHOVIZ_BACKEND;
+  if (isPackaged) return path.join(resourcesPath, "backend", "orthoviz-segment", "orthoviz-segment");
+  return path.resolve(__dirname, "..", "..", "..", "backend", ".venv", "bin", "orthoviz-segment");
 }
 
 /**
@@ -95,11 +102,12 @@ function lineSplitter(onLine) {
  *   "finished" {ok: true, outputDir} | {ok: false, cancelled, message, details}
  */
 class BackendRun extends EventEmitter {
-  constructor({ command, dicomFolder, outputDir }) {
+  constructor({ command, dicomFolder, outputDir, startedAt = Date.now() }) {
     super();
     this.command = command;
     this.dicomFolder = dicomFolder;
     this.outputDir = outputDir;
+    this.startedAt = startedAt;
     this.parser = new ProgressParser();
     this.recentLines = [];
     this.cancelled = false;
@@ -107,7 +115,6 @@ class BackendRun extends EventEmitter {
   }
 
   start() {
-    this.startedAt = Date.now();
     const log = fs.createWriteStream(path.join(this.outputDir, "backend.log"));
 
     this.child = spawn(this.command, [this.dicomFolder, this.outputDir], {

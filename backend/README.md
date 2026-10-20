@@ -42,6 +42,18 @@ Output folder:
 TotalSegmentator's usage-statistics upload is disabled inside this process so
 no network calls are made at runtime (design doc §6).
 
+## Freezing for the app
+
+The packaged app ships a PyInstaller build of `orthoviz-segment` (no Python needed on the user's Mac):
+
+```sh
+uv pip install --python .venv -e ".[build]"
+cd ../app && npm run build:backend     # -> backend/build/dist/orthoviz-segment/ (~1.4 GB)
+```
+
+See `packaging/orthoviz-segment.spec` for what is collected and why (nnU-Net's dynamic
+trainer lookup, GDCM's native library for compressed DICOM, torchvision's native ops).
+
 ## Tests
 
 ```sh
