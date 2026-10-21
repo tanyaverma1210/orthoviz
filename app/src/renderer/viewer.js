@@ -2,7 +2,7 @@
 
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { describe } from "./anatomy.js";
+import { describe, describeFinding } from "./anatomy.js";
 
 // Mesh positions are RAS millimetres (x = patient right, y = anterior, z = superior).
 // Display frame: x = patient's left (viewer's right when facing them), y = up, z = toward the viewer.
@@ -23,6 +23,9 @@ const VIEWS = {
 };
 
 const HIGHLIGHT = new THREE.Color(0x3a8fd6);
+// Vertebrae flagged by the fracture check. Bones are otherwise one uniform colour, so red
+// is reserved for this.
+export const FRACTURE_RED = 0xd64541;
 const CLICK_SLOP_PX = 5;
 const VIEW_ANIMATION_MS = 450;
 const OCCLUSION_CHECK_MS = 150;
@@ -33,7 +36,8 @@ export class Viewer {
   constructor(container, { onSelect = () => {} } = {}) {
     this.container = container;
     this.onSelect = onSelect;
-    this.structures = new Map(); // label -> {mesh, info, anchor}
+    this.structures = new Map(); // label -> {mesh, info, anchor, finding, color}
+    this.findings = new Map();
     this.selected = null;
     this.animation = null;
 
@@ -69,8 +73,10 @@ export class Viewer {
 
   // --- Model ----------------------------------------------------------------------
 
-  setModel({ meshes }) {
+  setModel({ meshes, fractures = null }) {
     this._clearModel();
+    // level ("C5") -> fracture-screening result; empty for results without fractures.json.
+    this.findings = new Map((fractures?.vertebrae ?? []).map((v) => [v.level, v]));
 
     const model = new THREE.Group();
     model.matrixAutoUpdate = false;
@@ -78,6 +84,8 @@ export class Viewer {
 
     for (const m of meshes) {
       const info = describe(m.name);
+      const finding = info.isVertebra ? this.findings.get(info.tag) ?? null : null;
+      const color = finding?.status === "fracture" ? FRACTURE_RED : info.color;
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute("position", new THREE.BufferAttribute(m.positions, 3));
       geometry.setIndex(new THREE.BufferAttribute(m.indices, 1));
@@ -86,7 +94,7 @@ export class Viewer {
 
       const transparent = info.opacity !== undefined;
       const material = new THREE.MeshStandardMaterial({
-        color: info.color,
+        color,
         roughness: 0.65,
         metalness: 0,
         transparent,
@@ -100,7 +108,7 @@ export class Viewer {
       model.add(mesh);
 
       const anchor = geometry.boundingBox.getCenter(new THREE.Vector3());
-      this.structures.set(m.label, { mesh, info, anchor });
+      this.structures.set(m.label, { mesh, info, anchor, finding, color });
     }
 
     // Centre the model at the origin.
@@ -116,9 +124,17 @@ export class Viewer {
     this.setView("front", { animate: false });
   }
 
-  /** [{label, info, visible}] for every structure in the model. */
+  /** [{label, info, visible, finding, color}] for every structure in the model. */
   listStructures() {
-    return [...this.structures].map(([label, s]) => ({ label, info: s.info, visible: s.mesh.visible }));
+    return [...this.structures].map(([label, s]) => ({
+      label, info: s.info, visible: s.mesh.visible, finding: s.finding, color: s.color,
+    }));
+  }
+
+  /** Label value of the vertebra at a level such as "C5", or null. */
+  labelForLevel(level) {
+    for (const [label, s] of this.structures) if (s.info.isVertebra && s.info.tag === level) return label;
+    return null;
   }
 
   setVisible(label, visible) {
@@ -143,12 +159,18 @@ export class Viewer {
     if (label === null) {
       this.tag.hidden = true;
     } else {
-      const { mesh, info } = this.structures.get(label);
-      mesh.material.emissive.copy(HIGHLIGHT);
-      mesh.material.emissiveIntensity = 0.6;
+      const { mesh, info, finding } = this.structures.get(label);
+      // Flagged vertebrae glow red rather than blue, so they stay clearly "red = possible fracture".
+      const flagged = finding?.status === "fracture";
+      mesh.material.emissive.setHex(flagged ? FRACTURE_RED : HIGHLIGHT.getHex());
+      mesh.material.emissiveIntensity = flagged ? 0.35 : 0.6;
       this.tagCode.textContent = info.tag;
       this.tagDetail.textContent = info.detail ?? "";
       this.tagDetail.hidden = !info.detail;
+      const f = finding ? describeFinding(finding) : null;
+      this.tagFinding.textContent = f ? [f.short, f.detail].filter(Boolean).join(" · ") : "";
+      this.tagFinding.hidden = !f;
+      this.tagFinding.dataset.tone = f?.tone ?? "";
       this.tag.classList.toggle("tag-vertebra", info.isVertebra);
       this._occlusionPose = null;
       this.tag.hidden = false;
@@ -201,9 +223,11 @@ export class Viewer {
     this.tag.className = "tag";
     this.tag.hidden = true;
     this.tag.setAttribute("role", "status");
-    this.tag.innerHTML = '<span class="tag-dot"></span><span class="tag-box"><span class="tag-code"></span><span class="tag-detail"></span></span>';
+    this.tag.innerHTML = '<span class="tag-dot"></span><span class="tag-box"><span class="tag-code"></span>'
+      + '<span class="tag-detail"></span><span class="tag-finding"></span></span>';
     this.tagCode = this.tag.querySelector(".tag-code");
     this.tagDetail = this.tag.querySelector(".tag-detail");
+    this.tagFinding = this.tag.querySelector(".tag-finding");
     this.container.appendChild(this.tag);
   }
 

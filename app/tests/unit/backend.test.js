@@ -57,3 +57,12 @@ test("backend path: env override, then bundled binary when packaged, else dev ve
   assert.strictEqual(backendCommand({ isPackaged: false, env: { ORTHOVIZ_BACKEND: "/x/seg" } }), "/x/seg");
   assert.match(backendCommand({ isPackaged: false, env: {} }), /backend\/\.venv\/bin\/orthoviz-segment$/);
 });
+
+test("the fracture check after segmentation shows as its own stage", () => {
+  const parser = new ProgressParser();
+  for (const line of LOG.split(/\r\n|\r|\n/)) parser.feed(line);
+  assert.strictEqual(parser.stage, "saving");
+  assert.ok(parser.feed("2026-10-21 11:40:01,000 INFO Checking vertebrae C3-C7 for height loss..."));
+  assert.strictEqual(parser.stage, "checking");
+  assert.ok(parser.fraction > 0.95 && parser.fraction < 1);
+});

@@ -140,6 +140,8 @@ if (reachedViewer) {
   log(`viewer: ${await page.textContent("#viewer-title")}`);
   const infoAfter = await page.evaluate(() => typeof window.__orthovizViewer);
   info.hook = infoAfter;
+  info.findings = await page.$$eval(".findings li", (els) => els.map((e) => `${e.dataset.level}:${e.dataset.tone}`).join(" "));
+  info.findingsSummary = await page.textContent(".findings-summary");
 }
 await app.close();
 await new Promise((r) => setTimeout(r, 1500)); // let late log lines arrive
@@ -156,6 +158,7 @@ console.log(`Backend used:                     ${backendPath ? backendPath.repla
 console.log(`First-use weight install shown:   ${stages.some((s) => s.startsWith("Getting ready")) ? "yes" : "no"}`);
 console.log(`Weights installed in fake HOME:   ${installed.filter((n) => !n.startsWith(".")).join(", ") || "none"}`);
 console.log(`window.__orthovizViewer:          ${info.hook}`);
+console.log(`Fracture check (Phase 2):         ${info.findingsSummary ?? "(none)"} [${info.findings ?? ""}]`);
 console.log(`Proxied requests (trap):          ${proxyHits.length ? proxyHits.join("; ") : "none"}`);
 console.log(`Sandbox-denied connections:       ${sandboxDenials.length ? "\n  " + sandboxDenials.join("\n  ") : "none"}`);
 console.log(`Non-local sockets seen (lsof):    ${remoteSockets.size ? [...remoteSockets].join("; ") : "none"}`);
@@ -164,4 +167,5 @@ console.log(`Console errors:                   ${problems.length ? problems.join
 assert.ok(reachedViewer, "segmentation did not complete");
 assert.strictEqual(info.hook, "undefined", "test hook must not exist in the packaged app");
 assert.strictEqual(installed.filter((n) => n.startsWith("Dataset")).length, 5, "weights not installed");
+assert.strictEqual(info.findings?.split(" ").length, 7, "fracture check should list C1-C7");
 fs.rmSync(work, { recursive: true, force: true });

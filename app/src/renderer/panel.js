@@ -1,6 +1,6 @@
 // Side panel: structures grouped by type, each with a colour swatch and a show/hide toggle.
 
-import { GROUPS } from "./anatomy.js";
+import { GROUPS, describeFinding } from "./anatomy.js";
 
 // Quick filters: which groups each one shows.
 const FILTERS = {
@@ -10,8 +10,9 @@ const FILTERS = {
 };
 
 export class StructurePanel {
-  constructor({ list, filterButtons, viewer }) {
+  constructor({ list, findings, filterButtons, viewer }) {
     this.list = list;
+    this.findingsBox = findings;
     this.filterButtons = filterButtons;
     this.viewer = viewer;
     this.rows = new Map(); // label -> {row, checkbox, group}
@@ -22,8 +23,9 @@ export class StructurePanel {
     }
   }
 
-  /** Rebuild the list for the viewer's current model. */
-  render() {
+  /** Rebuild the panel for the viewer's current model and fracture report. */
+  render(fractures = null) {
+    this._renderFindings(fractures);
     this.list.replaceChildren();
     this.rows.clear();
     this.groupToggles.clear();
@@ -39,7 +41,7 @@ export class StructurePanel {
     this._syncControls();
   }
 
-  /** Reflect the viewer's selection in the list. */
+  /** Reflect the viewer's selection in the list and findings. */
   showSelection(label) {
     for (const [l, { row, nameButton }] of this.rows) {
       const selected = l === label;
@@ -47,6 +49,72 @@ export class StructurePanel {
       nameButton.setAttribute("aria-pressed", String(selected));
       if (selected) row.scrollIntoView({ block: "nearest" });
     }
+    const level = label === null ? null : this.viewer.structures.get(label)?.info.tag;
+    for (const li of this.findingsBox.querySelectorAll("li")) li.classList.toggle("selected", li.dataset.level === level);
+  }
+
+  /** Fracture-check results, C1–C7, top of the panel. */
+  _renderFindings(report) {
+    const box = this.findingsBox;
+    box.replaceChildren();
+    const heading = document.createElement("h2");
+    heading.textContent = "Fracture check";
+    const summary = document.createElement("p");
+    summary.className = "findings-summary";
+    box.append(heading, summary);
+
+    if (!report || report.error) {
+      summary.textContent = report?.error
+        ? "The fracture check couldn't run for this scan."
+        : "Not available for this result (it was made before fracture checking was added).";
+      return;
+    }
+    const flagged = report.flagged ?? [];
+    summary.textContent = flagged.length
+      ? `Possible fracture: ${flagged.join(", ")}.`
+      : "No loss of vertebral height found in C3–C7.";
+    summary.dataset.tone = flagged.length ? "fracture" : "normal";
+    // Never let a clean C3–C7 result read as "all clear": C1 and C2 aren't checked.
+    const scope = document.createElement("p");
+    scope.className = "findings-scope";
+    scope.textContent = "C1 and C2 are not checked automatically.";
+    box.append(scope);
+
+    const ul = document.createElement("ul");
+    for (const finding of report.vertebrae) {
+      const f = describeFinding(finding);
+      const li = document.createElement("li");
+      li.dataset.level = finding.level;
+      li.dataset.tone = f.tone;
+      const level = document.createElement("button");
+      level.type = "button";
+      level.className = "finding-level";
+      level.textContent = finding.level;
+      level.setAttribute("aria-label", `Show ${finding.level}`);
+      level.addEventListener("click", () => {
+        const label = this.viewer.labelForLevel(finding.level);
+        if (label === null) return;
+        this.viewer.setVisible(label, true);
+        this._syncControls();
+        this.viewer.select(label);
+      });
+      const text = document.createElement("span");
+      text.className = "finding-text";
+      text.textContent = f.short;
+      if (f.detail) {
+        const detail = document.createElement("span");
+        detail.className = "finding-detail";
+        detail.textContent = f.detail;
+        text.append(detail);
+      }
+      li.append(level, text);
+      ul.append(li);
+    }
+    const note = document.createElement("p");
+    note.className = "findings-note";
+    note.textContent = "A screening aid, not a diagnosis. It only detects loss of vertebral body height in C3–C7; "
+      + "breaks elsewhere in a vertebra are not detected.";
+    box.append(ul, note);
   }
 
   applyFilter(filter) {
@@ -84,7 +152,7 @@ export class StructurePanel {
     return section;
   }
 
-  _renderRow({ label, info }) {
+  _renderRow({ label, info, color }) {
     const row = document.createElement("li");
     row.className = "row";
     row.dataset.name = info.name;
@@ -99,7 +167,7 @@ export class StructurePanel {
 
     const swatch = document.createElement("span");
     swatch.className = "swatch";
-    swatch.style.backgroundColor = `#${info.color.toString(16).padStart(6, "0")}`;
+    swatch.style.backgroundColor = `#${color.toString(16).padStart(6, "0")}`;
     if (info.opacity !== undefined) swatch.classList.add("see-through");
 
     // Clicking the name selects (highlights and labels) the structure, showing it if hidden.

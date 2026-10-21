@@ -12,6 +12,7 @@ const PREDICTION_PARTS = 5;
 const LOAD_END = 0.05;
 const PREDICT_START = 0.08;
 const PREDICT_END = 0.95;
+const CHECK_START = 0.96;
 
 /**
  * Path to the backend executable:
@@ -64,6 +65,8 @@ class ProgressParser {
       this._set("segmenting", PREDICT_START + done * (PREDICT_END - PREDICT_START));
     } else if (/Saving segmentations/.test(line) || /Segmentation finished/.test(line)) {
       this._set("saving", PREDICT_END);
+    } else if (/Checking vertebrae/.test(line)) {
+      this._set("checking", CHECK_START);
     }
 
     return before !== key();

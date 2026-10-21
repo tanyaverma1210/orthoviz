@@ -7,6 +7,7 @@
 import { _electron as electron } from "playwright-core";
 import assert from "node:assert";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 const appDir = path.resolve(import.meta.dirname, "..", "..");
@@ -84,6 +85,17 @@ assert.deepStrictEqual(spineOrder.slice(0, 8), ["C1 vertebra", "C2 vertebra", "C
 assert.strictEqual(await page.getAttribute('.segmented [data-filter="all"]', "aria-pressed"), "true");
 await shot("v1-front");
 step("panel lists structures by group, spine in anatomical order; 'Everything' filter active");
+
+// --- Fracture check on the real result
+const findings = await page.$$eval(".findings li", (els) => els.map((e) => [e.dataset.level, e.dataset.tone]));
+console.log("Findings:", findings.map(([l, t]) => `${l}:${t}`).join(" "));
+assert.deepStrictEqual(findings.map(([l]) => l), ["C1", "C2", "C3", "C4", "C5", "C6", "C7"]);
+assert.deepStrictEqual(findings.slice(0, 2).map(([, t]) => t), ["muted", "muted"], "C1/C2 not checked");
+assert.ok(findings.every(([, t]) => t !== "fracture"), "healthy patient1: nothing flagged");
+assert.match(await page.textContent(".findings-scope"), /C1 and C2 are not checked/);
+const redMeshes = await page.evaluate(() => [...window.__orthovizViewer.structures.values()].filter((s) => s.mesh.material.color.getHex() === 0xd64541).length);
+assert.strictEqual(redMeshes, 0);
+step("fracture check: C1–C7 listed, C1/C2 'not checked', nothing flagged or red for the healthy patient");
 
 // --- Click a vertebra in the 3D view (front view: through the see-through windpipe and vessels)
 const pickedFront = await clickOn("vertebrae_C5");
@@ -183,7 +195,36 @@ await page.click('.row[data-name="vertebrae_C4"] .row-name');
 await settle();
 await shot("v7-everything-c4");
 
+await app.close();
+
+// --- Display of a flagged vertebra. MOCK DATA: patient1's real result with a fracture flag
+// added to C5, only to check how the viewer shows a flag (no real scan is involved).
+const mockDir = fs.mkdtempSync(path.join(os.tmpdir(), "orthoviz-mock-flag-"));
+for (const f of ["segmentation.nii.gz", "labels.json"]) fs.copyFileSync(path.join(resultDir, f), path.join(mockDir, f));
+const report = JSON.parse(fs.readFileSync(path.join(resultDir, "fractures.json"), "utf8"));
+Object.assign(report.vertebrae.find((v) => v.level === "C5"),
+  { status: "fracture", grade: "moderate (Genant grade 2)", height_loss: 0.31, pattern: "wedge" });
+report.flagged = ["C5"];
+fs.writeFileSync(path.join(mockDir, "fractures.json"), JSON.stringify(report));
+
+const app2 = await electron.launch({ args: [appDir, `--result=${mockDir}`], cwd: appDir, env });
+const page2 = await app2.firstWindow();
+page2.on("console", (m) => { if (["error", "warning"].includes(m.type())) problems.push(`${m.type()}: ${m.text()}`); });
+await page2.waitForSelector('body[data-screen="viewer"]', { timeout: 60_000 });
+await page2.waitForSelector(".findings li");
+const c5Colour = await page2.evaluate(() => { const v = window.__orthovizViewer; return v.structures.get(v.labelForLevel("C5")).mesh.material.color.getHex(); });
+assert.strictEqual(c5Colour, 0xd64541, "flagged C5 is red");
+assert.match(await page2.textContent(".findings-summary"), /Possible fracture: C5/);
+assert.strictEqual(await page2.getAttribute('.findings li[data-level="C5"]', "data-tone"), "fracture");
+assert.match(await page2.textContent("#viewer-title"), /possible fracture: C5/);
+await page2.click('.findings li[data-level="C5"] .finding-level');
+assert.match(await page2.textContent(".tag-finding"), /Possible fracture · 31% loss of height at the front — moderate/);
+await page2.waitForTimeout(500);
+await page2.screenshot({ path: path.join(shotDir, "v8-mock-flag-c5.png") });
+await app2.close();
+fs.rmSync(mockDir, { recursive: true, force: true });
+step("(mock data) a flagged vertebra is red, listed in Findings, and its label explains the height loss");
+
 console.log(problems.length ? `Console problems:\n${problems.join("\n")}` : "No console errors or warnings");
 console.log(`Screenshots: ${shotDir}`);
-await app.close();
 if (problems.length) process.exit(1);

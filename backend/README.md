@@ -37,10 +37,24 @@ Output folder:
 | `ct.nii.gz` | Stacked input volume (Hounsfield units, RAS+) |
 | `segmentation.nii.gz` | Multi-label segmentation, same voxel grid as `ct.nii.gz` |
 | `labels.json` | `{label value: structure name}` for every structure found |
+| `fractures.json` | Phase 2 fracture check: C3–C7 vertebral body height loss (Genant grades); C1/C2 listed as not assessed |
 | `run_info.json` | Source study/series UIDs, volume geometry, loader warnings, timings |
 
 TotalSegmentator's usage-statistics upload is disabled inside this process so
 no network calls are made at runtime (design doc §6).
+
+## Fracture check (Phase 2)
+
+`orthoviz_backend/fracture.py` screens C3–C7 for loss of vertebral body height after
+segmentation (rule-based, after Inigo et al. 2024; Genant thresholds: flag at 25%, severe
+at 40%). C1 and C2 are excluded. It only detects body height loss, not fractures of the arch.
+
+```sh
+.venv/bin/python -m orthoviz_backend.fracture ../output/patient1          # re-run on an existing result
+.venv/bin/python tools/plot_fracture_measurements.py ../output/patient1 check.png   # see what was measured
+```
+
+`tools/fetch_rsna_study.py` downloads one RSNA 2022 study from Kaggle (instructions inside).
 
 ## Freezing for the app
 

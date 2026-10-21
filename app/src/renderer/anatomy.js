@@ -131,3 +131,34 @@ export function describe(name) {
     ...style,
   };
 }
+
+const WHERE = { wedge: "at the front", biconcave: "in the middle", crush: "across the whole vertebra" };
+
+/**
+ * Plain-language wording for one vertebra's fracture-screening result (fractures.json).
+ * tone: "fracture" | "borderline" | "normal" | "muted"
+ */
+export function describeFinding(finding) {
+  const pct = (v) => `${Math.round(v * 100)}%`;
+  switch (finding.status) {
+    case "fracture":
+      return {
+        tone: "fracture",
+        short: "Possible fracture",
+        detail: [`${pct(finding.height_loss)} loss of height`, WHERE[finding.pattern]].filter(Boolean).join(" ")
+          + ` — ${finding.grade.split(" (")[0]}`,
+      };
+    case "borderline":
+      return {
+        tone: "borderline",
+        short: "Borderline",
+        detail: `${pct(finding.height_loss)} height difference — below the fracture threshold`,
+      };
+    case "normal":
+      return { tone: "normal", short: "No loss of height found", detail: "" };
+    default:
+      return finding.scope === "excluded"
+        ? { tone: "muted", short: "Not checked automatically", detail: "Automatic checks don't support C1 and C2 yet." }
+        : { tone: "muted", short: "Not checked", detail: finding.reason ?? "" };
+  }
+}

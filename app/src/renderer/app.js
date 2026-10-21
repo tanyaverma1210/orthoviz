@@ -57,6 +57,7 @@ const STAGE_TEXT = {
   loading: (p) => (p.slices ? `Reading scan files (${p.slices} images)` : "Reading scan files"),
   segmenting: (p) => `Identifying bones and tissues — step ${Math.max(p.part, 1)} of ${p.parts}`,
   saving: () => "Saving results",
+  checking: () => "Checking the neck vertebrae (C3–C7) for loss of height",
   meshing: () => "Creating the 3D model",
 };
 
@@ -174,9 +175,11 @@ async function openResult(outputDir, sourceFolder) {
   show("viewer");
   if (!viewer) createViewer();
   viewer.setModel(model);
-  panel.render();
+  panel.render(model.fractures);
   const name = (sourceFolder || outputDir).split("/").filter(Boolean).pop();
-  $("viewer-title").textContent = `${name} · ${model.meshes.length} structures`;
+  const flagged = model.fractures?.flagged ?? [];
+  $("viewer-title").textContent = `${name} · ${model.meshes.length} structures`
+    + (flagged.length ? ` · possible fracture: ${flagged.join(", ")}` : "");
   document.body.dataset.meshCount = String(model.meshes.length);
 }
 
@@ -184,6 +187,7 @@ function createViewer() {
   viewer = new Viewer($("viewport"), { onSelect: (label) => panel?.showSelection(label) });
   panel = new StructurePanel({
     list: $("structure-list"),
+    findings: $("findings"),
     filterButtons: [...document.querySelectorAll(".segmented button")],
     viewer,
   });
