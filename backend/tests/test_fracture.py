@@ -97,3 +97,23 @@ def test_vertebra_cut_off_by_the_scan_is_not_assessed():
 def test_tilted_neck_does_not_create_false_positives():
     report = analyze(make_spine(tilt_deg=20), LABELS)
     assert report["flagged"] == []
+
+
+def test_flagged_vertebra_carries_a_marker_placed_at_its_front_edge():
+    image = make_spine(wedge={"C5": 6.5})
+    report = analyze(image, LABELS)
+    v = by_level(report)
+    marker = v["C5"]["marker"]
+    assert marker["location"] == "anterior"
+    assert marker["measured_mm"] == pytest.approx(6.5, abs=1.0)
+    assert marker["healthy_mm"] == pytest.approx(BODY_H, abs=1.0)      # neighbours are healthy boxes
+    assert 1 - marker["measured_mm"] / marker["healthy_mm"] == pytest.approx(v["C5"]["height_loss"], abs=0.01)
+    # Just in front of the body's front face, at its bottom edge, pointing up.
+    data = np.asarray(image.dataobj)
+    c5 = np.argwhere(data == VALUE["C5"]) * VOX
+    front_mm, c5_bottom_mm = c5[:, 1].max(), c5[:, 2].min()
+    x, y, z = marker["base_ras"]
+    assert front_mm < y < front_mm + 5.0
+    assert z == pytest.approx(c5_bottom_mm, abs=1.5)
+    assert marker["up_ras"][2] > 0.98
+    assert all(v[lv]["marker"] is None for lv in ["C3", "C4", "C6", "C7"])

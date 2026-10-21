@@ -51,7 +51,7 @@ from scipy import ndimage
 
 log = logging.getLogger(__name__)
 
-METHOD_VERSION = 1
+METHOD_VERSION = 2  # 2: flagged vertebrae carry a 3D marker for the viewer
 ASSESSED_LEVELS = ["C3", "C4", "C5", "C6", "C7"]
 NOT_ASSESSED_LEVELS = {
     "C1": "C1 (the atlas) is a ring with no vertebral body, so height-loss rules don't apply.",
@@ -93,6 +93,7 @@ def analyze(segmentation: nib.Nifti1Image, labels: dict[int, str]) -> dict:
     centroids = {level: _to_world(affine, idx.mean(axis=0))[0] for level, idx in voxels.items()}
 
     measured = {}
+    geometry = {}
     results = {}
     for level in ASSESSED_LEVELS:
         if level not in voxels:
@@ -103,7 +104,7 @@ def analyze(segmentation: nib.Nifti1Image, labels: dict[int, str]) -> dict:
             results[level] = _not_assessed(level, "Only partly inside the scan, so its height can't be measured.")
             continue
         try:
-            measured[level] = _measure(level, idx, affine, centroids)
+            measured[level], geometry[level] = _measure(level, idx, affine, centroids)
         except MeasurementError as e:
             results[level] = _not_assessed(level, str(e))
 
@@ -116,7 +117,7 @@ def analyze(segmentation: nib.Nifti1Image, labels: dict[int, str]) -> dict:
             reference = {k: float(np.median([o[k] for o in others])) for k in shape[level]}
         else:
             reference = {"wedge": 1.0, "biconcave": 1.0}  # raw Genant ratios, no crush check
-        results[level] = _grade(level, m, shape[level], reference)
+        results[level] = _grade(level, m, shape[level], reference, geometry[level])
 
     vertebrae = [results[lv] for lv in ASSESSED_LEVELS]
     for level, reason in NOT_ASSESSED_LEVELS.items():
@@ -173,16 +174,22 @@ def _local_frame(level, centroids):
 
 
 def _measure(level, idx, affine, centroids, debug=None):
-    """Anterior/middle/posterior body heights (mm) of one vertebra.
+    """Anterior/middle/posterior body heights (mm) of one vertebra, and where they were measured.
 
-    If `debug` is a dict, it receives the aligned body points and edges (for plotting).
+    Returns (heights, geometry). `geometry` locates the measurement in RAS millimetres so the
+    viewer can draw it: the levelled "up" direction, the body's bottom edge at the front,
+    middle and back, and its half-width. If `debug` is a dict, it receives the aligned body
+    points and edges (for plotting).
     """
     lateral, anterior, up = _local_frame(level, centroids)
     pts = _to_world(affine, idx)                       # (N, 3) in mm
-    rel = pts - pts.mean(axis=0)
-    u, a, h = rel @ lateral, rel @ anterior, rel @ up
+    center = pts.mean(axis=0)
+    rel = pts - center
+    u_all, a_all, h_all = rel @ lateral, rel @ anterior, rel @ up
+    u0 = float(np.median(u_all))                       # midline
+    u, a, h = u_all, a_all, h_all
 
-    slab = np.abs(u - np.median(u)) <= SLAB_HALF_WIDTH_MM
+    slab = np.abs(u - u0) <= SLAB_HALF_WIDTH_MM
     if slab.sum() < 50:
         raise MeasurementError("Too little of the vertebra at the midline to measure.")
     u, a, h = u[slab], a[slab], h[slab]
@@ -194,14 +201,16 @@ def _measure(level, idx, affine, centroids, debug=None):
     # 2. Rotate (in the sagittal plane) so the endplates are level; the spine-based "up"
     #    is only approximate because vertebra centroids include the arch.
     voxel_extent = float(np.abs(affine[:3, :3].T @ up).max())  # one voxel's size along "up"
+    theta = 0.0
     for _ in range(3):
         angle = _endplate_tilt(u, a, h, voxel_extent)
         c, s = np.cos(angle), np.sin(angle)
         a, h = c * a + s * h, -s * a + c * h
+        theta += angle
 
     # 3. Body edges: where it reaches substantial height, so a lip or bone spur at the
     #    rim doesn't count as the edge.
-    col_a, col_height = _column_heights(u, a, h, voxel_extent)
+    col_a, col_height, col_bottom = _column_heights(u, a, h, voxel_extent)
     bins = np.floor(col_a / BIN_MM).astype(int)
     profile = {b: np.median(col_height[bins == b]) for b in np.unique(bins)}
     typical = np.median(list(profile.values()))
@@ -228,9 +237,31 @@ def _measure(level, idx, affine, centroids, debug=None):
     if min(heights["anterior"], heights["posterior"]) <= 0:
         raise MeasurementError("Implausible height profile.")
 
+    # 5. Where the heights were measured, back in RAS: the body's bottom edge (from a line
+    #    through the column bottoms, like the heights) at the front, middle and back.
+    b_slope, b_intercept = np.polyfit(from_front[fit], col_bottom[fit], 1)
+    c, s = np.cos(theta), np.sin(theta)
+
+    def to_ras(u_, a_, h_):                            # undo the levelling rotation, then the frame
+        return center + u_ * lateral + (c * a_ - s * h_) * anterior + (s * a_ + c * h_) * up
+
+    a_all_r, h_all_r = c * a_all + s * h_all, -s * a_all + c * h_all
+    in_body = (a_all_r >= a_back) & (a_all_r <= a_front)
+    geometry = {
+        "up": -s * anterior + c * up,                  # levelled "up", perpendicular to the endplates
+        "anterior": c * anterior + s * up,
+        "lateral": lateral,
+        "bases": {
+            "anterior": to_ras(u0, a_front, b_intercept),
+            "middle": to_ras(u0, a_front - 0.5 * depth, b_intercept + 0.5 * b_slope),
+            "posterior": to_ras(u0, a_back, b_intercept + b_slope),
+        },
+        "half_width": float(np.percentile(np.abs(u_all[in_body] - u0), 95)) if in_body.any() else 10.0,
+    }
+
     if debug is not None:
         debug.update(a=a, h=h, a_front=a_front, a_back=a_back)
-    return heights
+    return heights, geometry
 
 
 def _canal_front(a):
@@ -251,13 +282,14 @@ def _canal_front(a):
 
 
 def _column_heights(u, a, h, voxel_extent):
-    """Height of every (lateral, front-back) column: (column front-back position, height)."""
+    """Every (lateral, front-back) column: (front-back position, height, bottom)."""
     cols = np.stack([np.floor(u / BIN_MM), np.floor(a / BIN_MM)], axis=1).astype(int)
     order = np.lexsort((cols[:, 1], cols[:, 0]))
     cols, hs = cols[order], h[order]
     starts = np.flatnonzero(np.r_[True, (np.diff(cols, axis=0) != 0).any(axis=1)])
     col_a = (cols[starts, 1] + 0.5) * BIN_MM
-    return col_a, np.maximum.reduceat(hs, starts) - np.minimum.reduceat(hs, starts) + voxel_extent
+    bottom = np.minimum.reduceat(hs, starts) - voxel_extent / 2
+    return col_a, np.maximum.reduceat(hs, starts) - np.minimum.reduceat(hs, starts) + voxel_extent, bottom
 
 
 def _endplate_tilt(u, a, h, voxel_extent):
@@ -278,7 +310,32 @@ def _endplate_tilt(u, a, h, voxel_extent):
     return float(np.arctan(slope))
 
 
-def _grade(level, m, shape, reference):
+# Which height each collapse pattern compares, and how its healthy value follows from the
+# reference (the median of the patient's other C3–C7 vertebrae): loss = 1 - measured / healthy.
+PATTERN_LOCATION = {"wedge": "anterior", "biconcave": "middle", "crush": "posterior"}
+MARKER_GAP_MM = 3.0  # keep the marker just clear of the bone surface
+
+
+def _marker(m, pattern, reference, geometry):
+    """Viewer marker for a flagged vertebra: the measured vs healthy height, placed where measured."""
+    location = PATTERN_LOCATION[pattern]
+    measured = m[location]
+    healthy = reference["crush"] if pattern == "crush" else m["posterior"] * reference[pattern]
+    base = geometry["bases"][location]
+    if location == "anterior":                         # just in front of the front edge
+        base = base + MARKER_GAP_MM * geometry["anterior"]
+    else:                                              # beside the body, on the patient's left
+        base = base - (geometry["half_width"] + MARKER_GAP_MM) * geometry["lateral"]
+    return {
+        "location": location,
+        "measured_mm": round(float(measured), 2),
+        "healthy_mm": round(float(healthy), 2),
+        "base_ras": [round(float(v), 2) for v in base],
+        "up_ras": [round(float(v), 4) for v in geometry["up"]],
+    }
+
+
+def _grade(level, m, shape, reference, geometry=None):
     losses = {k: 1 - shape[k] / reference[k] for k in reference}
     pattern, loss = max(losses.items(), key=lambda kv: kv[1])
     loss = max(loss, 0.0)
@@ -304,6 +361,7 @@ def _grade(level, m, shape, reference):
         "losses": {k: round(v, 3) for k, v in losses.items()},
         "ratios": {"anterior_posterior": round(shape["wedge"], 3), "middle_posterior": round(shape["biconcave"], 3)},
         "reference": {k: round(v, 3) for k, v in reference.items()},
+        "marker": _marker(m, pattern, reference, geometry) if status == "fracture" and geometry else None,
     }
 
 

@@ -27,6 +27,8 @@ const HIGHLIGHT = new THREE.Color(0x3a8fd6);
 // is reserved for this.
 export const FRACTURE_RED = 0xd64541;
 const CLICK_SLOP_PX = 5;
+// Height comparison drawn on a selected flagged vertebra (sizes in mm).
+const MARKER = { solid: 0xff5a4e, dashed: 0xf2f2f2, barRadius: 0.45, dashRadius: 0.35, dash: 1.2, gap: 0.8, tick: 4 };
 const VIEW_ANIMATION_MS = 450;
 const OCCLUSION_CHECK_MS = 150;
 const OCCLUSION_SAMPLES = 12;
@@ -64,6 +66,8 @@ export class Viewer {
     this.raycaster = new THREE.Raycaster();
     this._setUpPicking();
     this._createTag();
+    this._createMarkerLabel();
+    this.marker = null; // {group, labelAt} for the selected flagged vertebra
 
     this.model = null;
     new ResizeObserver(() => this._resize()).observe(container);
@@ -81,6 +85,7 @@ export class Viewer {
     const model = new THREE.Group();
     model.matrixAutoUpdate = false;
     model.matrix.copy(RAS_TO_DISPLAY);
+    this.rasGroup = model; // children here are positioned in RAS millimetres
 
     for (const m of meshes) {
       const info = describe(m.name);
@@ -156,6 +161,7 @@ export class Viewer {
     }
     this.selected = label;
 
+    this._removeMarker();
     if (label === null) {
       this.tag.hidden = true;
     } else {
@@ -171,6 +177,7 @@ export class Viewer {
       this.tagFinding.textContent = f ? [f.short, f.detail].filter(Boolean).join(" · ") : "";
       this.tagFinding.hidden = !f;
       this.tagFinding.dataset.tone = f?.tone ?? "";
+      if (flagged && finding.marker) this._showMarker(finding);
       this.tag.classList.toggle("tag-vertebra", info.isVertebra);
       this._occlusionPose = null;
       this.tag.hidden = false;
@@ -270,13 +277,86 @@ export class Viewer {
     return true;
   }
 
+  /** Zoom to one structure, keeping the current viewing angle. */
+  focusOn(label) {
+    if (this.structures.has(label)) this.setView(null, { only: label });
+  }
+
+  // --- Height comparison marker -----------------------------------------------------------
+
+  /**
+   * "Here's the healthy height vs. what it is now", at the spot the fracture check measured:
+   * a solid bar for the measured height and a dashed continuation up to the healthy height
+   * (derived from the patient's own other C3–C7 vertebrae), labelled with the loss.
+   */
+  _showMarker(finding) {
+    const m = finding.marker;
+    const base = new THREE.Vector3(...m.base_ras);
+    const up = new THREE.Vector3(...m.up_ras).normalize();
+    const now = base.clone().addScaledVector(up, m.measured_mm);
+    const healthy = base.clone().addScaledVector(up, m.healthy_mm);
+
+    // Ticks across the bar, in two directions so they read from the front and from the side.
+    const across = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0)]
+      .map((d) => d.addScaledVector(up, -d.dot(up)).normalize());
+
+    const solid = new THREE.MeshBasicMaterial({ color: MARKER.solid });
+    const dashed = new THREE.MeshBasicMaterial({ color: MARKER.dashed });
+    const group = new THREE.Group();
+    group.add(bar(base, now, MARKER.barRadius, solid));
+    for (const at of [base, now]) for (const d of across) group.add(tick(at, d, MARKER.tick, MARKER.barRadius, solid));
+    const gapLength = m.healthy_mm - m.measured_mm;
+    for (let t = 0; t < gapLength; t += MARKER.dash + MARKER.gap) {
+      const a = now.clone().addScaledVector(up, t);
+      const b = now.clone().addScaledVector(up, Math.min(t + MARKER.dash, gapLength));
+      group.add(bar(a, b, MARKER.dashRadius, dashed));
+    }
+    for (const d of across) group.add(tick(healthy, d, MARKER.tick, MARKER.dashRadius, dashed));
+    group.renderOrder = 2;
+    this.rasGroup.add(group);
+
+    this.marker = { group, labelAt: now.clone().lerp(healthy, 0.5) };
+    this.markerLoss.textContent = `${Math.round(finding.height_loss * 100)}% lost`;
+    this.markerLabel.hidden = false;
+  }
+
+  _removeMarker() {
+    if (!this.marker) return;
+    this.marker.group.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
+    const mats = new Set();
+    this.marker.group.traverse((o) => { if (o.isMesh) mats.add(o.material); });
+    mats.forEach((mat) => mat.dispose());
+    this.marker.group.removeFromParent();
+    this.marker = null;
+    this.markerLabel.hidden = true;
+  }
+
+  _createMarkerLabel() {
+    this.markerLabel = document.createElement("div");
+    this.markerLabel.className = "marker-label";
+    this.markerLabel.hidden = true;
+    this.markerLabel.innerHTML = '<span class="marker-loss"></span>'
+      + '<span class="marker-key"><span class="key-solid"></span>now <span class="key-dashed"></span>healthy height</span>';
+    this.markerLoss = this.markerLabel.querySelector(".marker-loss");
+    this.container.appendChild(this.markerLabel);
+  }
+
+  _positionMarkerLabel() {
+    if (!this.marker) return;
+    const p = this.marker.labelAt.clone().applyMatrix4(this.rasGroup.matrixWorld).project(this.camera);
+    const offscreen = p.z > 1 || Math.abs(p.x) > 1.05 || Math.abs(p.y) > 1.05;
+    this.markerLabel.style.visibility = offscreen ? "hidden" : "visible";
+    const { clientWidth: w, clientHeight: h } = this.container;
+    this.markerLabel.style.transform = `translate(${((p.x + 1) / 2) * w}px, ${((1 - p.y) / 2) * h}px)`;
+  }
+
   // --- Camera ------------------------------------------------------------------------
 
   /**
    * Frame the visible structures from a preset direction ("front" | "side" | "top"),
    * or from the current direction when `name` is null (used after a quick filter).
    */
-  setView(name, { animate = true } = {}) {
+  setView(name, { animate = true, only = null } = {}) {
     // Drop any leftover rotation momentum from a recent drag, which would otherwise keep
     // nudging the camera off the preset direction. (A non-damped update applies and clears it.)
     this.controls.enableDamping = false;
@@ -285,8 +365,11 @@ export class Viewer {
 
     this.scene.updateMatrixWorld(true); // the model may have just been re-centred
     const box = new THREE.Box3();
-    for (const { mesh } of this.structures.values()) if (mesh.visible) box.expandByObject(mesh);
+    for (const [label, { mesh }] of this.structures) {
+      if (mesh.visible && (only === null || label === only)) box.expandByObject(mesh);
+    }
     if (box.isEmpty()) return;
+    if (only !== null) box.expandByScalar(box.getSize(new THREE.Vector3()).length() * 0.12); // a little context around it
     const center = box.getCenter(new THREE.Vector3());
     const radius = box.getSize(new THREE.Vector3()).length() / 2;
     const distance = (radius / Math.sin(THREE.MathUtils.degToRad(this.camera.fov / 2))) * 0.9;
@@ -333,10 +416,12 @@ export class Viewer {
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
     this._positionTag(now);
+    this._positionMarkerLabel();
   }
 
   _clearModel() {
     this.select(null);
+    this._removeMarker();
     if (!this.model) return;
     this.model.traverse((obj) => {
       if (obj.isMesh) {
@@ -356,4 +441,19 @@ export class Viewer {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
+}
+
+/** A thin cylinder from p0 to p1 (RAS mm). */
+function bar(p0, p1, radius, material) {
+  const dir = p1.clone().sub(p0);
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, dir.length(), 10), material);
+  mesh.position.copy(p0).addScaledVector(dir, 0.5);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+  return mesh;
+}
+
+/** A short crossbar of `length` centred on `at`, along `direction`. */
+function tick(at, direction, length, radius, material) {
+  const half = direction.clone().multiplyScalar(length / 2);
+  return bar(at.clone().sub(half), at.clone().add(half), radius, material);
 }

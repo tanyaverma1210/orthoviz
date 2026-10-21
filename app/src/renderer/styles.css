@@ -413,3 +413,27 @@ dialog p { margin: 10px 0; font-size: 14px; }
 .tag-finding[data-tone="fracture"] { color: var(--fracture); font-weight: 600; }
 .tag-finding[data-tone="borderline"] { color: var(--borderline); }
 .tag-finding[data-tone="normal"] { color: var(--ok); }
+
+/* Height comparison beside a selected flagged vertebra. */
+.marker-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin: 0;
+  /* sits to the left of the gap it describes */
+  translate: calc(-100% - 14px) -50%;
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: rgba(16, 20, 24, 0.88);
+  border: 1px solid rgba(229, 103, 91, 0.6);
+  white-space: nowrap;
+}
+.marker-loss { color: var(--fracture); font-weight: 700; font-size: 15px; }
+.marker-key { color: var(--text-muted); font-size: 11px; display: flex; align-items: center; gap: 4px; }
+.key-solid, .key-dashed { display: inline-block; width: 14px; height: 0; margin-left: 4px; }
+.key-solid { border-top: 3px solid #ff5a4e; }
+.key-dashed { border-top: 2px dashed #f2f2f2; }

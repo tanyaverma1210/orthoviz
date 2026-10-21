@@ -97,6 +97,7 @@ export class StructurePanel {
         this.viewer.setVisible(label, true);
         this._syncControls();
         this.viewer.select(label);
+        this.viewer.focusOn(label); // "show me C7": zoom in so its details are readable
       });
       const text = document.createElement("span");
       text.className = "finding-text";

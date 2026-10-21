@@ -219,11 +219,47 @@ assert.strictEqual(await page2.getAttribute('.findings li[data-level="C5"]', "da
 assert.match(await page2.textContent("#viewer-title"), /possible fracture: C5/);
 await page2.click('.findings li[data-level="C5"] .finding-level');
 assert.match(await page2.textContent(".tag-finding"), /Possible fracture · 31% loss of height at the front — moderate/);
+// The mock flag has no marker data (like results made before markers existed): no comparison drawn.
+assert.strictEqual(await page2.evaluate(() => window.__orthovizViewer.marker), null);
+assert.strictEqual(await page2.isVisible(".marker-label"), false);
 await page2.waitForTimeout(500);
 await page2.screenshot({ path: path.join(shotDir, "v8-mock-flag-c5.png") });
 await app2.close();
 fs.rmSync(mockDir, { recursive: true, force: true });
-step("(mock data) a flagged vertebra is red, listed in Findings, and its label explains the height loss");
+step("(mock data) a flagged vertebra is red, listed in Findings, and its label explains the height loss; no marker without marker data");
+
+// --- Height comparison on the real demo case (patient_fracture4: C7 flagged, 75% front height lost).
+const demoDir = path.resolve(appDir, "..", "output", "patient_fracture4");
+if (fs.existsSync(path.join(demoDir, "fractures.json"))) {
+  const app3 = await electron.launch({ args: [appDir, `--result=${demoDir}`], cwd: appDir, env });
+  const page3 = await app3.firstWindow();
+  page3.on("console", (m) => { if (["error", "warning"].includes(m.type())) problems.push(`${m.type()}: ${m.text()}`); });
+  page3.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
+  await page3.waitForSelector('body[data-screen="viewer"]', { timeout: 60_000 });
+  await page3.waitForSelector(".findings li");
+  const distBefore = await page3.evaluate(() => { const v = window.__orthovizViewer; return v.camera.position.distanceTo(v.controls.target); });
+  await page3.click('[data-view="side"]');
+  await page3.waitForTimeout(700);
+  await page3.click('.findings li[data-level="C7"] .finding-level');
+  await page3.waitForTimeout(800);
+  const marker = await page3.evaluate(() => window.__orthovizViewer.marker?.group.children.length ?? 0);
+  assert.ok(marker > 0, "marker drawn for flagged C7");
+  assert.match(await page3.textContent(".marker-loss"), /^75% lost$/);
+  assert.strictEqual(await page3.isVisible(".marker-label"), true);
+  const distAfter = await page3.evaluate(() => { const v = window.__orthovizViewer; return v.camera.position.distanceTo(v.controls.target); });
+  assert.ok(distAfter < distBefore * 0.6, `clicking C7 in the findings zooms in (${distBefore.toFixed(0)} -> ${distAfter.toFixed(0)})`);
+  await page3.screenshot({ path: path.join(shotDir, "v9-demo-c7-height-comparison.png") });
+  await page3.click('.findings li[data-level="C6"] .finding-level');   // healthy vertebra: no marker
+  assert.strictEqual(await page3.evaluate(() => window.__orthovizViewer.marker), null);
+  await page3.click('.findings li[data-level="C7"] .finding-level');
+  await page3.keyboard.press("Escape");                                  // deselect: marker goes too
+  assert.strictEqual(await page3.evaluate(() => window.__orthovizViewer.marker), null);
+  assert.strictEqual(await page3.isVisible(".marker-label"), false);
+  await app3.close();
+  step("demo case: selecting flagged C7 zooms in and draws now-vs-healthy height with '75% lost'; healthy vertebra or Escape removes it");
+} else {
+  console.log("(skipped demo-case check: output/patient_fracture4 not present)");
+}
 
 console.log(problems.length ? `Console problems:\n${problems.join("\n")}` : "No console errors or warnings");
 console.log(`Screenshots: ${shotDir}`);

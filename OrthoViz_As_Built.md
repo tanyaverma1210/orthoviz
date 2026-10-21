@@ -2,7 +2,7 @@
 
 **What this is:** a plain-language record of what was actually built, how the pieces work together, and why things ended up the way they did. It complements the original [OrthoViz_Design_Doc.md](OrthoViz_Design_Doc.md), which is kept unchanged as the record of the original plan and decisions.
 
-**Written:** 2026-10-20; updated 2026-10-21 for the first version of fracture detection (Phase 2), its real demo case, and the reference paper's citation.
+**Written:** 2026-10-20; updated 2026-10-21 for the first version of fracture detection (Phase 2), its real demo case, the reference paper's citation, and the height comparison drawn on flagged vertebrae.
 
 **Fracture detection (Phase 2) is only partly there.** OrthoViz shows the spine as a 3D model and names each vertebra (Phase 1, complete). A first version of fracture detection now checks **C3–C7** for **loss of vertebral body height** and colours a flagged vertebra red. Its limits matter:
 - it can only see fractures that make the vertebral body shorter (compression-type); breaks in the bony arch behind the spinal canal, or cracks that don't change the body's shape, are invisible to it;
@@ -184,6 +184,8 @@ For each of C3, C4, C5, C6 and C7:
 
 C1 and C2 are listed as "not checked automatically": C1 is a ring with no body, and C2 has a peg (the dens) fused to its body, so "height loss" doesn't apply to them.
 
+For each flagged vertebra, `fractures.json` also records **where** the compared height was measured (the bottom edge of the body at that spot, and the vertebra's levelled "up" direction), so the viewer can draw the height comparison in the right place (step 7). Nothing extra is measured for this — it's the same measurement, saved with its location.
+
 If the check itself fails for some reason, the scan still completes and the 3D model is still shown; the problem is recorded in `fractures.json`. It takes 1–2 seconds.
 
 **Known weakness — slanted vertebrae.** Step 2 levels each vertebra by fitting lines to its top and bottom surfaces. When vertebrae start out at a steep slant in this frame (a strongly bent or turned neck), the leveling doesn't fully work: the body is measured as a tilted, parallelogram-like shape, and its heights come out wrong in either direction. This caused two false alarms in one test patient and an unreliable reading in another (§6). Fixing it means rethinking how each vertebra is oriented in 3D — left as future work.
@@ -219,7 +221,8 @@ What the viewer does:
 - **Click to name.** Clicking a vertebra highlights it in blue and shows a label like **C5 — 5th neck vertebra (cervical)**. Clicks pass through see-through tissue to the bone behind. Dragging to rotate never changes the selection. Clicking a name in the panel does the same. Escape or clicking empty space clears it.
 - **"(behind)" labels.** If the selected structure can't be seen from the current angle (e.g. C4 seen from above is hidden under the skull), the label turns dashed and says "(behind)", so it never seems to point at the wrong bone.
 - **Preset views.** **Front**, **Side** (from the patient's left, face pointing left — like a standard side X-ray) and **Top**, each a smooth camera move framing whatever is visible.
-- **Fracture check.** The top of the side panel lists C1–C7 with their result: "Possible fracture" (red), "Borderline" (amber), "No loss of height found", or "Not checked" with the reason. A summary line says which vertebrae (if any) are flagged, and always adds that C1 and C2 aren't checked, so a clean result never reads as "all clear". A note says it is a screening aid, not a diagnosis, and only detects loss of body height. A flagged vertebra is coloured **red** in the 3D view (the only use of red on bone — bones are otherwise one colour), and its name label adds the finding. Results made before fracture checking existed say "not available".
+- **Fracture check.** The top of the side panel lists C1–C7 with their result: "Possible fracture" (red), "Borderline" (amber), "No loss of height found", or "Not checked" with the reason. A summary line says which vertebrae (if any) are flagged, and always adds that C1 and C2 aren't checked, so a clean result never reads as "all clear". A note says it is a screening aid, not a diagnosis, and only detects loss of body height. A flagged vertebra is coloured **red** in the 3D view (the only use of red on bone — bones are otherwise one colour), and its name label adds the finding. Clicking a vertebra in the fracture-check list zooms in on it. Results made before fracture checking existed say "not available".
+- **Height comparison on a flagged vertebra.** When a flagged vertebra is selected, a small marker is drawn where its height was measured — at the front edge for a front collapse (like the demo's C7), or beside the body for a middle or whole-body collapse: a **solid red bar** for its height now, a **dashed white line** continuing up to where a healthy top would be, and a label on the gap ("75% lost", the same figure as in the name label). The healthy height comes from the patient's own other C3–C7 vertebrae (the same comparison the check used). It appears only on the selected flagged vertebra, so the view stays uncluttered.
 - **About dialog.** Explains what OrthoViz is (and that it is not a diagnostic device), credits TotalSegmentator with its citation, and opens the full license files.
 
 ---
@@ -325,9 +328,9 @@ Two development-only gotchas also came up: VS Code's built-in terminal sets a va
 | Test | Command | What it proves |
 |---|---|---|
 | App unit tests (19) | `cd app && npm test` | Progress reading (against a real backend log, including the fracture-check stage), 3D shape building (closed, outward-facing, correct size and position), NIfTI reading, plain-language names, the security policy, backend path choice, first-use model installation (fresh machine, incomplete folder, user's own copy, cancel) |
-| Backend unit tests (11) | `cd backend && .venv/bin/python -m pytest tests` | DICOM loader: slice sorting, positions, value conversion, duplicate/uneven-slice handling, the real sample. Fracture check on a synthetic spine with known answers: healthy (nothing flagged; C1/C2 excluded), wedge and crush fractures flagged with the right grade, a mild change marked borderline, a vertebra cut off by the scan not checked, a tilted neck not causing false alarms |
+| Backend unit tests (12) | `cd backend && .venv/bin/python -m pytest tests` | DICOM loader: slice sorting, positions, value conversion, duplicate/uneven-slice handling, the real sample. Fracture check on a synthetic spine with known answers: healthy (nothing flagged; C1/C2 excluded), wedge and crush fractures flagged with the right grade, a mild change marked borderline, a vertebra cut off by the scan not checked, a tilted neck not causing false alarms, and a flagged vertebra's height-comparison marker placed at its front edge with the right heights |
 | Full app run | `cd app && npm run test:e2e` (~3 min) | Real app + real backend on patient1: Import → Processing → Viewer; Cancel stops everything, including helper processes |
-| Viewer interactions | `cd app && npm run test:viewer` (~20 s) | Panel, filters, real mouse clicks naming vertebrae, drag doesn't select, preset views, "(behind)" labels, clearing selection, fracture check panel (C1/C2 "not checked", nothing red for healthy patient1) — on the saved patient1 result. Plus a **mock** result (patient1 with a made-up C5 flag) to check that a flagged vertebra turns red, is listed, and is explained in its label |
+| Viewer interactions | `cd app && npm run test:viewer` (~20 s) | Panel, filters, real mouse clicks naming vertebrae, drag doesn't select, preset views, "(behind)" labels, clearing selection, fracture check panel (C1/C2 "not checked", nothing red for healthy patient1) — on the saved patient1 result. Plus a **mock** result (patient1 with a made-up C5 flag) to check that a flagged vertebra turns red, is listed, and is explained in its label; and the real demo case (patient_fracture4) to check that selecting C7 zooms in and draws the height comparison labelled "75% lost", which goes away on deselecting |
 | Packaged app, offline, first launch | `cd app && npm run test:packaged -- <path to OrthoViz.app>` (~4 min) | See below |
 
 ### One-off validation checks (results)
@@ -393,6 +396,7 @@ Before trusting it, the sandbox was proven to work: a test download inside it wa
 - Packaging: self-contained `.dmg`, bundled models installed on first use, licences included, ad-hoc signed, verified fully offline.
 - Licensing: GPL decoder removed.
 - Fracture check, first version: C3–C7 body height loss with Genant grades, red flagging and a findings panel in the viewer. On 7 real patients: 3/3 body fractures flagged at the right level, 2/30 healthy vertebrae wrongly flagged (one patient). Real demo case: patient_fracture4.
+- Height comparison on a selected flagged vertebra: solid bar for its height now, dashed line up to the healthy height, labelled with the loss ("75% lost" on the demo's C7); clicking a vertebra in the fracture-check list zooms in on it.
 
 ### Still open
 

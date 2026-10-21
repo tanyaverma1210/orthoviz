@@ -37,7 +37,7 @@ Output folder:
 | `ct.nii.gz` | Stacked input volume (Hounsfield units, RAS+) |
 | `segmentation.nii.gz` | Multi-label segmentation, same voxel grid as `ct.nii.gz` |
 | `labels.json` | `{label value: structure name}` for every structure found |
-| `fractures.json` | Phase 2 fracture check: C3–C7 vertebral body height loss (Genant grades); C1/C2 listed as not assessed |
+| `fractures.json` | Phase 2 fracture check: C3–C7 vertebral body height loss (Genant grades); C1/C2 listed as not assessed. Flagged vertebrae include a `marker` (measured vs healthy height and where it was measured) for the viewer's height comparison |
 | `run_info.json` | Source study/series UIDs, volume geometry, loader warnings, timings |
 
 TotalSegmentator's usage-statistics upload is disabled inside this process so
