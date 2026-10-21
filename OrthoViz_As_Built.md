@@ -2,7 +2,7 @@
 
 **What this is:** a plain-language record of what was actually built, how the pieces work together, and why things ended up the way they did. It complements the original [OrthoViz_Design_Doc.md](OrthoViz_Design_Doc.md), which is kept unchanged as the record of the original plan and decisions.
 
-**Written:** 2026-10-20; updated 2026-10-21 for the first version of fracture detection (Phase 2) and its real demo case.
+**Written:** 2026-10-20; updated 2026-10-21 for the first version of fracture detection (Phase 2), its real demo case, and the reference paper's citation.
 
 **Fracture detection (Phase 2) is only partly there.** OrthoViz shows the spine as a 3D model and names each vertebra (Phase 1, complete). A first version of fracture detection now checks **C3–C7** for **loss of vertebral body height** and colours a flagged vertebra red. Its limits matter:
 - it can only see fractures that make the vertebral body shorter (compression-type); breaks in the bony arch behind the spinal canal, or cracks that don't change the body's shape, are invisible to it;
@@ -165,7 +165,13 @@ The backend writes:
 
 - **`fracture.py`** — measures each vertebral body's height and applies simple rules. No AI training involved.
 
-The approach follows the reference paper in `docs/papers/` (Inigo et al. 2024): use TotalSegmentator's segmentation, measure vertebral body heights, apply threshold rules. Because the paper's own numbers were tuned on a different dataset (lower-back vertebrae, osteoporosis), OrthoViz uses the standard **Genant** height-loss grades instead.
+The approach follows this reference paper:
+
+> Inigo B., Shen Y., Killeen B. D., Song M., Krieger A., Bradley C., Unberath M., "An Intrinsically Explainable Approach to Detecting Vertebral Compression Fractures in CT Scans via Neurosymbolic Modeling", arXiv:2412.17258, 2024 — https://arxiv.org/abs/2412.17258
+
+(The PDF isn't stored in the repository, because its license doesn't permit redistribution; download it from the arXiv link. A local copy can be kept in `docs/papers/`, which git ignores.)
+
+That is: use TotalSegmentator's segmentation, measure vertebral body heights, apply threshold rules. Because the paper's own numbers were tuned on a different dataset (lower-back vertebrae, osteoporosis), OrthoViz uses the standard **Genant** height-loss grades instead.
 
 For each of C3, C4, C5, C6 and C7:
 
@@ -294,9 +300,9 @@ Two development-only gotchas also came up: VS Code's built-in terminal sets a va
 
 **Phase 2 (fracture detection) as a separate, pluggable step.** As the design doc required, nothing in Phase 1 had to be rebuilt: the check is one extra step in `pipeline.py` after segmentation, writing its own results file (`fractures.json`), which the viewer reads if present.
 
-**Fracture rules: Genant grades, not the paper's fitted numbers.** The reference paper's thresholds were fitted to a different dataset, so OrthoViz uses the standard Genant height-loss grades. One naming note: in Genant's scale, 20–25% is "mild" (grade 1), 25–40% "moderate" (grade 2) and over 40% "severe" (grade 3). OrthoViz flags at 25% (moderate) and labels 40%+ severe, and records 20–25% as borderline without flagging it.
+**Fracture rules: Genant grades, not the paper's fitted numbers.** The thresholds in the reference paper (Inigo et al., [arXiv:2412.17258](https://arxiv.org/abs/2412.17258); full citation in §2 step 5) were fitted to a different dataset, so OrthoViz uses the standard Genant height-loss grades. One naming note: in Genant's scale, 20–25% is "mild" (grade 1), 25–40% "moderate" (grade 2) and over 40% "severe" (grade 3). OrthoViz flags at 25% (moderate) and labels 40%+ severe, and records 20–25% as borderline without flagging it.
 
-**Compare each vertebra with its neighbours.** Healthy neck vertebrae are naturally waisted, so raw Genant ratios put healthy vertebrae right at the threshold (one healthy C5 measured 25%). Comparing each vertebra with the patient's other C3–C7 vertebrae removes that normal shape — the same idea as the paper's "reference vertebra" and a radiologist's comparison with adjacent levels.
+**Compare each vertebra with its neighbours.** Healthy neck vertebrae are naturally waisted, so raw Genant ratios put healthy vertebrae right at the threshold (one healthy C5 measured 25%). Comparing each vertebra with the patient's other C3–C7 vertebrae removes that normal shape — the same idea as the "reference vertebra" in Inigo et al. ([arXiv:2412.17258](https://arxiv.org/abs/2412.17258)) and a radiologist's comparison with adjacent levels.
 
 **C1 and C2 excluded from automatic checking (future work).** Their shapes don't fit a body-height model: C1 has no body, C2 has the dens. They still display correctly and can be clicked and named; the fracture check simply says "not checked automatically". Detecting C1/C2 fractures would need a different approach (for example, looking for breaks in the ring of C1 or at the base of the dens) — future work.
 
@@ -502,6 +508,7 @@ app/                       Electron app
   tests/unit, tests/e2e    tests
 dicom_samples/             sample scans (not in git)
 output/                    saved results from development runs (not in git)
+docs/papers/               local copies of reference papers (not in git; cited in this document)
 ```
 
 ---

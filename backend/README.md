@@ -46,7 +46,7 @@ no network calls are made at runtime (design doc §6).
 ## Fracture check (Phase 2)
 
 `orthoviz_backend/fracture.py` screens C3–C7 for loss of vertebral body height after
-segmentation (rule-based, after Inigo et al. 2024; Genant thresholds: flag at 25%, severe
+segmentation (rule-based, after Inigo et al. 2024, https://arxiv.org/abs/2412.17258; Genant thresholds: flag at 25%, severe
 at 40%). C1 and C2 are excluded. It only detects body height loss, not fractures of the arch.
 
 ```sh

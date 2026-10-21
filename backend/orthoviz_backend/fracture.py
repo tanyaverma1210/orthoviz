@@ -1,7 +1,8 @@
 """Phase 2: rule-based screening for vertebral body height loss, C3–C7 only.
 
 Approach (after Inigo et al. 2024, "An Intrinsically Explainable Approach to Detecting
-Vertebral Compression Fractures in CT Scans via Neurosymbolic Modeling"): take the
+Vertebral Compression Fractures in CT Scans via Neurosymbolic Modeling",
+https://arxiv.org/abs/2412.17258): take the
 TotalSegmentator segmentation, measure each vertebral body's height at the front, middle
 and back, and apply simple threshold rules. No model training. Unlike the paper's fitted
 thresholds (calibrated on a different dataset), the cut-offs are the standard Genant
